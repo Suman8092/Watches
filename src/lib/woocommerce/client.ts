@@ -8,8 +8,12 @@
  * - When NEXT_PUBLIC_WC_STORE_URL is unset, automatically operates in high-fidelity mock mode.
  */
 
-export const STORE_URL = process.env.NEXT_PUBLIC_WC_STORE_URL?.replace(/\/$/, "") || "";
-export const IS_MOCK_MODE = !STORE_URL;
+export const STORE_URL = (
+  process.env.NEXT_PUBLIC_WC_STORE_URL ||
+  process.env.WC_STORE_URL ||
+  "https://backend.sntoriginals.com"
+).replace(/\/$/, "");
+export const IS_MOCK_MODE = false;
 
 const CART_TOKEN_KEY = "noire_wc_cart_token";
 const NONCE_KEY = "noire_wc_nonce";
@@ -147,7 +151,26 @@ export async function storeApiFetch<T>(
   }
 
   const { params, cartToken, nonce, headers, ...restOptions } = options;
-  const url = buildStoreApiUrl(endpoint, params);
+  const isClient = typeof window !== "undefined";
+
+  let requestUrl: string;
+  if (isClient) {
+    const cleanEndpoint = endpoint.replace(/^\//, "");
+    let localUrl = `/api/wc/store/${cleanEndpoint}`;
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, val]) => {
+        if (val !== undefined && val !== null) {
+          searchParams.append(key, String(val));
+        }
+      });
+      const q = searchParams.toString();
+      if (q) localUrl += `?${q}`;
+    }
+    requestUrl = localUrl;
+  } else {
+    requestUrl = buildStoreApiUrl(endpoint, params).toString();
+  }
 
   const tokenToUse = cartToken || getClientCartToken();
   const nonceToUse = nonce || getClientNonce();
@@ -167,13 +190,13 @@ export async function storeApiFetch<T>(
   }
 
   try {
-    let response = await fetch(url.toString(), {
+    let response = await fetch(requestUrl, {
       headers: requestHeaders,
       ...restOptions,
     });
 
-    // If initial attempt returns 404 with HTML (e.g. server lacks wp-json rewrite rules), fallback to ?rest_route=
-    if (response.status === 404 && !url.searchParams.has("rest_route")) {
+    // If initial server-side attempt returns 404 with HTML (e.g. server lacks wp-json rewrite rules), fallback to ?rest_route=
+    if (!isClient && response.status === 404 && !requestUrl.includes("rest_route")) {
       const fallbackUrl = buildStoreApiUrl(endpoint, params, true);
       response = await fetch(fallbackUrl.toString(), {
         headers: requestHeaders,
