@@ -27,6 +27,8 @@ interface OrderDetail {
   payment_method: string;
   payment_method_title: string;
   customer_note?: string;
+  discount_total?: string;
+  coupon_lines?: Array<{ code: string; discount: string }>;
   billing: {
     first_name: string;
     last_name: string;
@@ -222,6 +224,15 @@ export default function OrderDetailPage() {
                       <p className="text-[#C5A880] pt-1">Complimentary Service</p>
                     </div>
                   </div>
+
+                  {order.customer_note && (
+                    <div className="pt-3 border-t border-white/10 text-xs">
+                      <span className="text-[10px] text-[#C5A880] uppercase tracking-wider block font-mono mb-1">
+                        Bespoke Client Instructions
+                      </span>
+                      <p className="text-[#C6C0B5] italic font-sans-ui">{order.customer_note}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -244,6 +255,15 @@ export default function OrderDetailPage() {
                       <span>Courier Insurance</span>
                       <span className="text-[#C5A880]">Complimentary</span>
                     </div>
+
+                    {order.discount_total && parseFloat(order.discount_total) > 0 && (
+                      <div className="flex justify-between text-emerald-400">
+                        <span>
+                          Privilege Benefit {order.coupon_lines?.length ? `(${order.coupon_lines.map((c) => c.code).join(", ")})` : ""}
+                        </span>
+                        <span>-{formatCurrency(parseFloat(order.discount_total), order.currency)}</span>
+                      </div>
+                    )}
 
                     <div className="flex justify-between text-[#8E877C]">
                       <span>VAT &amp; Duties</span>

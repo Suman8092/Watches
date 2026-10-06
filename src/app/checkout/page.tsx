@@ -3,19 +3,27 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ShieldCheck, Lock, CheckCircle2, ArrowRight, ArrowLeft, AlertCircle } from "lucide-react";
+import { ShieldCheck, Lock, CheckCircle2, ArrowRight, ArrowLeft, AlertCircle, Tag, X, Check } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { submitCheckout } from "@/lib/woocommerce/checkout";
 import { formatCurrency } from "@/lib/woocommerce/cart";
 
 export default function CheckoutPage() {
-  const { cart, clearCart } = useCart();
+  const { cart, clearCart, applyCoupon, removeCoupon, isUpdating } = useCart();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderComplete, setOrderComplete] = useState(false);
   const [orderId, setOrderId] = useState<string>("");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [completedItems, setCompletedItems] = useState(cart.items);
   const [completedTotal, setCompletedTotal] = useState(cart.totals.total_formatted);
+  const [completedCoupons, setCompletedCoupons] = useState<string[]>([]);
+  const [completedDiscount, setCompletedDiscount] = useState<string>("₹0");
+  const [completedCustomerNote, setCompletedCustomerNote] = useState<string>("");
+
+  const [couponCode, setCouponCode] = useState("");
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
+  const [isSubmittingCoupon, setIsSubmittingCoupon] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -28,11 +36,38 @@ export default function CheckoutPage() {
     state: "",
     postcode: "",
     country: "IN",
+    orderNotes: "",
     paymentMethod: "bacs",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponCode.trim()) return;
+
+    setIsSubmittingCoupon(true);
+    setCouponError(null);
+    setCouponSuccess(null);
+
+    const result = await applyCoupon(couponCode.trim());
+    if (result.success) {
+      setCouponSuccess(`Privilege code "${couponCode.toUpperCase()}" applied.`);
+      setCouponCode("");
+      setTimeout(() => setCouponSuccess(null), 4000);
+    } else {
+      setCouponError(result.error || "Invalid privilege code");
+      setTimeout(() => setCouponError(null), 4000);
+    }
+    setIsSubmittingCoupon(false);
+  };
+
+  const handleRemoveCoupon = async (code: string) => {
+    await removeCoupon(code);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,6 +100,7 @@ export default function CheckoutPage() {
           country: formData.country,
         },
         payment_method: formData.paymentMethod,
+        customer_note: formData.orderNotes.trim() || undefined,
       });
 
       if (result.error) {
@@ -77,6 +113,9 @@ export default function CheckoutPage() {
       setOrderId(assignedId);
       setCompletedItems([...cart.items]);
       setCompletedTotal(cart.totals.total_formatted);
+      setCompletedCoupons([...cart.coupons]);
+      setCompletedDiscount(cart.totals.discount_formatted);
+      setCompletedCustomerNote(formData.orderNotes.trim());
 
       // Persist order in local archive for Collector Account
       if (typeof window !== "undefined") {
@@ -146,6 +185,18 @@ export default function CheckoutPage() {
               <span>DISPATCH METHOD</span>
               <span className="text-[#C5A880]">ARMORED INSURED COURIER</span>
             </div>
+            {completedCoupons.length > 0 && (
+              <div className="flex justify-between text-[#8E877C]">
+                <span>PRIVILEGE BENEFIT</span>
+                <span className="text-emerald-400 font-bold">{completedCoupons.join(", ")} ({completedDiscount})</span>
+              </div>
+            )}
+            {completedCustomerNote && (
+              <div className="flex justify-between text-[#8E877C]">
+                <span>BESPOKE INSTRUCTIONS</span>
+                <span className="text-white text-right max-w-[260px] truncate">{completedCustomerNote}</span>
+              </div>
+            )}
             <div className="flex justify-between text-[#8E877C]">
               <span>ORDER STATUS</span>
               <span className="text-emerald-400 uppercase tracking-widest text-[10px]">ALLOCATED · ON HOLD</span>
@@ -383,10 +434,30 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {/* Special Instructions & Bespoke Notes */}
+              <div className="space-y-4">
+                <h3 className="font-serif-display text-2xl text-[#F4F1EA] pb-2 border-b border-white/10">
+                  3. Concierge &amp; Bespoke Notes
+                </h3>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest font-mono text-[#8E877C] block mb-1.5">
+                    Special Delivery Instructions or Horological Requests (Optional)
+                  </label>
+                  <textarea
+                    name="orderNotes"
+                    rows={3}
+                    value={formData.orderNotes}
+                    onChange={handleChange}
+                    placeholder="e.g. Concierge delivery instructions, caseback engraving notes, or security gate clearance details."
+                    className="w-full bg-[#141414] border border-white/15 px-3.5 py-2.5 text-xs text-[#F4F1EA] placeholder-[#666666] focus:outline-none focus:border-[#C5A880] resize-none"
+                  />
+                </div>
+              </div>
+
               {/* Payment Method */}
               <div className="space-y-4">
                 <h3 className="font-serif-display text-2xl text-[#F4F1EA] pb-2 border-b border-white/10">
-                  3. Encrypted Settlement
+                  4. Encrypted Settlement
                 </h3>
                 <div className="p-4 bg-[#141414] border border-white/15 space-y-4">
                   <label
@@ -490,11 +561,82 @@ export default function CheckoutPage() {
                   ))}
                 </div>
 
+                {/* Active Coupons in Checkout */}
+                {cart.coupons.length > 0 && (
+                  <div className="pt-3 border-t border-white/10 space-y-2">
+                    <span className="text-[10px] uppercase tracking-widest text-[#8E877C] block font-mono">
+                      Applied Privileges
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {cart.coupons.map((code) => (
+                        <div
+                          key={code}
+                          className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#1A1815] border border-[#C5A880]/40 text-[#C5A880] text-xs font-mono rounded"
+                        >
+                          <Tag className="w-3 h-3" />
+                          <span>{code}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCoupon(code)}
+                            disabled={isUpdating}
+                            aria-label={`Remove coupon ${code}`}
+                            className="p-0.5 hover:text-white transition-colors ml-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Coupon Input in Checkout */}
+                <div className="pt-3 border-t border-white/10">
+                  <span className="text-[10px] uppercase tracking-widest text-[#8E877C] block mb-2 font-mono">
+                    Collector Privilege / Coupon Code
+                  </span>
+                  <div className="flex border border-white/15 bg-[#0B0B0B]">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      placeholder="e.g. NOIRE10"
+                      disabled={isSubmittingCoupon || isUpdating}
+                      className="flex-1 bg-transparent px-3 py-2 text-xs text-[#F4F1EA] placeholder-[#666666] focus:outline-none uppercase font-mono tracking-wider"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyCoupon}
+                      disabled={isSubmittingCoupon || isUpdating || !couponCode.trim()}
+                      className="px-4 text-[11px] uppercase tracking-widest text-[#C5A880] hover:text-white disabled:opacity-40 transition-colors"
+                    >
+                      {isSubmittingCoupon ? "..." : "Apply"}
+                    </button>
+                  </div>
+                  {couponError && (
+                    <p className="text-[11px] text-rose-400 mt-1.5 flex items-center space-x-1">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mr-1" />
+                      <span>{couponError}</span>
+                    </p>
+                  )}
+                  {couponSuccess && (
+                    <p className="text-[11px] text-emerald-400 mt-1.5 flex items-center">
+                      <Check className="w-3.5 h-3.5 mr-1" /> {couponSuccess}
+                    </p>
+                  )}
+                </div>
+
                 <div className="pt-4 border-t border-white/10 space-y-2 text-xs">
                   <div className="flex justify-between text-[#8E877C]">
                     <span>Subtotal</span>
                     <span className="text-[#F4F1EA] font-mono">{cart.totals.subtotal_formatted}</span>
                   </div>
+                  {cart.totals.discount > 0 && (
+                    <div className="flex justify-between text-emerald-400">
+                      <span>Privilege Benefit</span>
+                      <span className="font-mono">{cart.totals.discount_formatted}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-[#8E877C]">
                     <span>Insured Armored Transport</span>
                     <span className="text-[#C5A880] uppercase tracking-wider text-[11px]">

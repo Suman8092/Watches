@@ -216,7 +216,15 @@ export async function storeApiFetch<T>(
 
     if (!response.ok) {
       const errorJson = await response.json().catch(() => null);
-      const message = errorJson?.message || `WooCommerce API error: ${response.statusText}`;
+      let message = errorJson?.message || `WooCommerce API error: ${response.statusText}`;
+      if (typeof message === "string") {
+        message = message
+          .replace(/&quot;/g, '"')
+          .replace(/&#039;/g, "'")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">");
+      }
       return {
         data: null,
         error: message,

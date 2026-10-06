@@ -3,21 +3,39 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus, Minus, Trash2, ArrowRight, ShieldCheck, ArrowLeft, Check } from "lucide-react";
+import { Plus, Minus, Trash2, ArrowRight, ShieldCheck, ArrowLeft, Check, Tag, X, AlertCircle } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatCurrency } from "@/lib/woocommerce/cart";
 
 export default function CartPage() {
-  const { cart, updateQuantity, removeFromCart, isUpdating } = useCart();
+  const { cart, updateQuantity, removeFromCart, applyCoupon, removeCoupon, isUpdating } = useCart();
   const [couponCode, setCouponCode] = useState("");
-  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
+  const [isSubmittingCoupon, setIsSubmittingCoupon] = useState(false);
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (couponCode.trim()) {
-      setCouponApplied(true);
-      setTimeout(() => setCouponApplied(false), 3000);
+    if (!couponCode.trim()) return;
+
+    setIsSubmittingCoupon(true);
+    setCouponError(null);
+    setCouponSuccess(null);
+
+    const result = await applyCoupon(couponCode.trim());
+    if (result.success) {
+      setCouponSuccess(`Privilege code "${couponCode.toUpperCase()}" applied.`);
+      setCouponCode("");
+      setTimeout(() => setCouponSuccess(null), 4000);
+    } else {
+      setCouponError(result.error || "Invalid privilege code");
+      setTimeout(() => setCouponError(null), 4000);
     }
+    setIsSubmittingCoupon(false);
+  };
+
+  const handleRemoveCoupon = async (code: string) => {
+    await removeCoupon(code);
   };
 
   return (
@@ -152,6 +170,12 @@ export default function CartPage() {
                     <span>Subtotal</span>
                     <span className="text-[#F4F1EA] font-mono">{cart.totals.subtotal_formatted}</span>
                   </div>
+                  {cart.totals.discount > 0 && (
+                    <div className="flex justify-between text-emerald-400">
+                      <span>Privilege Benefit</span>
+                      <span className="font-mono">{cart.totals.discount_formatted}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-[#8E877C]">
                     <span>Armored Courier &amp; Insurance</span>
                     <span className="text-[#C5A880] uppercase tracking-wider text-[11px]">
@@ -173,6 +197,34 @@ export default function CartPage() {
                   </div>
                 </div>
 
+                {/* Active Coupons List */}
+                {cart.coupons.length > 0 && (
+                  <div className="pt-3 border-t border-white/10 space-y-2">
+                    <span className="text-[10px] uppercase tracking-widest text-[#8E877C] block font-mono">
+                      Applied Privileges
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {cart.coupons.map((code) => (
+                        <div
+                          key={code}
+                          className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#1A1815] border border-[#C5A880]/40 text-[#C5A880] text-xs font-mono rounded"
+                        >
+                          <Tag className="w-3 h-3" />
+                          <span>{code}</span>
+                          <button
+                            onClick={() => handleRemoveCoupon(code)}
+                            disabled={isUpdating}
+                            aria-label={`Remove coupon ${code}`}
+                            className="p-0.5 hover:text-white transition-colors ml-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Coupon Input */}
                 <form onSubmit={handleApplyCoupon} className="pt-2 border-t border-white/10">
                   <span className="text-[10px] uppercase tracking-widest text-[#8E877C] block mb-2 font-mono">
@@ -183,19 +235,27 @@ export default function CartPage() {
                       type="text"
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value)}
-                      placeholder="Enter code"
+                      placeholder="e.g. NOIRE10"
+                      disabled={isSubmittingCoupon || isUpdating}
                       className="flex-1 bg-transparent px-3 py-2 text-xs text-[#F4F1EA] placeholder-[#666666] focus:outline-none uppercase font-mono tracking-wider"
                     />
                     <button
                       type="submit"
-                      className="px-4 text-[11px] uppercase tracking-widest text-[#C5A880] hover:text-white transition-colors"
+                      disabled={isSubmittingCoupon || isUpdating || !couponCode.trim()}
+                      className="px-4 text-[11px] uppercase tracking-widest text-[#C5A880] hover:text-white disabled:opacity-40 transition-colors"
                     >
-                      Apply
+                      {isSubmittingCoupon ? "..." : "Apply"}
                     </button>
                   </div>
-                  {couponApplied && (
-                    <p className="text-[11px] text-emerald-400 mt-1 flex items-center">
-                      <Check className="w-3.5 h-3.5 mr-1" /> Collector privilege validated.
+                  {couponError && (
+                    <p className="text-[11px] text-rose-400 mt-1.5 flex items-center space-x-1">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mr-1" />
+                      <span>{couponError}</span>
+                    </p>
+                  )}
+                  {couponSuccess && (
+                    <p className="text-[11px] text-emerald-400 mt-1.5 flex items-center">
+                      <Check className="w-3.5 h-3.5 mr-1" /> {couponSuccess}
                     </p>
                   )}
                 </form>

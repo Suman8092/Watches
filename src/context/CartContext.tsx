@@ -2,7 +2,15 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Cart, Product } from "@/types/woocommerce";
-import { fetchCart, addItem, removeItem, updateItemQuantity, createEmptyCart } from "@/lib/woocommerce/cart";
+import {
+  fetchCart,
+  addItem,
+  removeItem,
+  updateItemQuantity,
+  applyCoupon as applyCouponApi,
+  removeCoupon as removeCouponApi,
+  createEmptyCart,
+} from "@/lib/woocommerce/cart";
 
 interface CartContextType {
   cart: Cart;
@@ -12,6 +20,8 @@ interface CartContextType {
   addToCart: (product: Product, quantity?: number) => Promise<void>;
   removeFromCart: (key: string) => Promise<void>;
   updateQuantity: (key: string, qty: number) => Promise<void>;
+  applyCoupon: (code: string) => Promise<{ success: boolean; error?: string }>;
+  removeCoupon: (code: string) => Promise<void>;
   isUpdating: boolean;
   quickViewProduct: Product | null;
   openQuickView: (product: Product) => void;
@@ -83,6 +93,35 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const applyCoupon = async (code: string): Promise<{ success: boolean; error?: string }> => {
+    setIsUpdating(true);
+    try {
+      const res = await applyCouponApi(code);
+      setCart(res.cart);
+      if (res.error) {
+        return { success: false, error: res.error };
+      }
+      return { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to apply coupon";
+      return { success: false, error: message };
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const removeCoupon = async (code: string): Promise<void> => {
+    setIsUpdating(true);
+    try {
+      const updated = await removeCouponApi(code);
+      setCart(updated);
+    } catch (err) {
+      console.error("Failed to remove coupon:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const clearCart = () => {
     setCart(createEmptyCart());
     if (typeof window !== "undefined") {
@@ -112,6 +151,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         addToCart,
         removeFromCart,
         updateQuantity,
+        applyCoupon,
+        removeCoupon,
         isUpdating,
         quickViewProduct,
         openQuickView,

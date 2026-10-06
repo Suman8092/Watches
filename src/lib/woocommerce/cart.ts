@@ -130,7 +130,10 @@ export function normalizeStoreCart(raw: any): Cart {
   return {
     items,
     item_count: raw.items_count ?? items.reduce((acc, i) => acc + i.quantity, 0),
-    coupons: (raw.coupons || []).map((c: any) => c.code || c),
+    coupons: (raw.coupons || [])
+      .map((c: any) => (typeof c === "string" ? c : c?.code || ""))
+      .filter(Boolean)
+      .map((c: string) => c.toUpperCase()),
     totals: {
       subtotal,
       subtotal_formatted: formatCurrency(subtotal, currencyCode),
@@ -323,13 +326,19 @@ export async function updateItemQuantity(itemKey: string, quantity: number): Pro
  * Apply a coupon code via WooCommerce Store API
  */
 export async function applyCoupon(code: string): Promise<{ cart: Cart; error: string | null }> {
+  const cleanCode = code.trim();
+  if (!cleanCode) {
+    const currentCart = await fetchCart();
+    return { cart: currentCart, error: "Please enter a valid coupon code" };
+  }
+
   if (IS_MOCK_MODE) {
     const currentCart = await fetchCart();
     const discountAmount = Math.round(currentCart.totals.subtotal * 0.1); // 10% privilege discount
     const newTotals = calculateCartTotals(currentCart.items, discountAmount);
     const updatedCart: Cart = {
       ...currentCart,
-      coupons: [...currentCart.coupons, code.toUpperCase()],
+      coupons: [...currentCart.coupons, cleanCode.toUpperCase()],
       totals: newTotals,
     };
 
@@ -341,7 +350,7 @@ export async function applyCoupon(code: string): Promise<{ cart: Cart; error: st
 
   const { data, error } = await storeApiFetch<any>("cart/apply-coupon", {
     method: "POST",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code: cleanCode }),
   });
 
   if (error || !data) {
@@ -356,12 +365,13 @@ export async function applyCoupon(code: string): Promise<{ cart: Cart; error: st
  * Remove a coupon code via WooCommerce Store API
  */
 export async function removeCoupon(code: string): Promise<Cart> {
+  const cleanCode = code.trim();
   if (IS_MOCK_MODE) {
     const currentCart = await fetchCart();
     const newTotals = calculateCartTotals(currentCart.items, 0);
     const updatedCart: Cart = {
       ...currentCart,
-      coupons: currentCart.coupons.filter((c) => c !== code.toUpperCase()),
+      coupons: currentCart.coupons.filter((c) => c !== cleanCode.toUpperCase()),
       totals: newTotals,
     };
     if (typeof window !== "undefined") {
@@ -372,7 +382,7 @@ export async function removeCoupon(code: string): Promise<Cart> {
 
   const { data } = await storeApiFetch<any>("cart/remove-coupon", {
     method: "POST",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code: cleanCode }),
   });
 
   if (data) {

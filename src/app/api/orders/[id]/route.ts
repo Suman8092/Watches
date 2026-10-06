@@ -39,6 +39,11 @@ export async function GET(
       payment_method: order.payment_method,
       payment_method_title: order.payment_method_title,
       customer_note: order.customer_note || "",
+      discount_total: order.discount_total || "0.00",
+      coupon_lines: (order.coupon_lines || []).map((cl: any) => ({
+        code: cl.code,
+        discount: cl.discount,
+      })),
       billing: {
         first_name: order.billing?.first_name || "",
         last_name: order.billing?.last_name || "",

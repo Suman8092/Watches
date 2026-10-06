@@ -1,14 +1,53 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Minus, Trash2, ShieldCheck, ArrowRight, ShoppingBag } from "lucide-react";
+import { X, Plus, Minus, Trash2, ShieldCheck, ArrowRight, ShoppingBag, Tag, Check, AlertCircle } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 
 export function CartDrawer() {
-  const { cart, isCartOpen, closeCart, updateQuantity, removeFromCart, isUpdating } = useCart();
+  const {
+    cart,
+    isCartOpen,
+    closeCart,
+    updateQuantity,
+    removeFromCart,
+    applyCoupon,
+    removeCoupon,
+    isUpdating,
+  } = useCart();
+
+  const [couponCode, setCouponCode] = useState("");
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
+  const [isSubmittingCoupon, setIsSubmittingCoupon] = useState(false);
+  const [showCouponInput, setShowCouponInput] = useState(false);
+
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponCode.trim()) return;
+
+    setIsSubmittingCoupon(true);
+    setCouponError(null);
+    setCouponSuccess(null);
+
+    const result = await applyCoupon(couponCode.trim());
+    if (result.success) {
+      setCouponSuccess(`Privilege code "${couponCode.toUpperCase()}" applied.`);
+      setCouponCode("");
+      setTimeout(() => setCouponSuccess(null), 4000);
+    } else {
+      setCouponError(result.error || "Invalid privilege code");
+      setTimeout(() => setCouponError(null), 4000);
+    }
+    setIsSubmittingCoupon(false);
+  };
+
+  const handleRemoveCoupon = async (code: string) => {
+    await removeCoupon(code);
+  };
 
   return (
     <AnimatePresence>
@@ -157,11 +196,107 @@ export function CartDrawer() {
             {/* Footer / Checkout */}
             {cart.items.length > 0 && (
               <div className="p-6 border-t border-white/10 bg-[#121212] space-y-4">
-                <div className="space-y-2 text-xs">
+                {/* Applied Coupons List */}
+                {cart.coupons.length > 0 && (
+                  <div className="space-y-1.5 pb-2 border-b border-white/10">
+                    <span className="text-[10px] uppercase tracking-widest text-[#8E877C] font-mono block">
+                      Active Collector Privileges
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {cart.coupons.map((code) => (
+                        <div
+                          key={code}
+                          className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#1A1815] border border-[#C5A880]/40 text-[#C5A880] text-xs font-mono rounded"
+                        >
+                          <Tag className="w-3 h-3" />
+                          <span>{code}</span>
+                          <button
+                            onClick={() => handleRemoveCoupon(code)}
+                            disabled={isUpdating}
+                            aria-label={`Remove coupon ${code}`}
+                            className="p-0.5 hover:text-white transition-colors ml-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Collapsible Coupon Input */}
+                <div className="pb-1">
+                  {!showCouponInput && cart.coupons.length === 0 ? (
+                    <button
+                      onClick={() => setShowCouponInput(true)}
+                      className="text-[11px] uppercase tracking-wider text-[#C5A880] hover:text-white transition-colors flex items-center space-x-1 font-mono"
+                    >
+                      <Tag className="w-3 h-3" />
+                      <span>Have a Privileged Collector Code?</span>
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-widest text-[#8E877C] font-mono">
+                          Privilege / Promo Code
+                        </span>
+                        {cart.coupons.length === 0 && (
+                          <button
+                            onClick={() => {
+                              setShowCouponInput(false);
+                              setCouponError(null);
+                            }}
+                            className="text-[10px] text-[#8E877C] hover:text-white"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                      <form onSubmit={handleApplyCoupon} className="flex border border-white/15 bg-[#0B0B0B]">
+                        <input
+                          type="text"
+                          value={couponCode}
+                          onChange={(e) => setCouponCode(e.target.value)}
+                          placeholder="e.g. NOIRE10"
+                          disabled={isSubmittingCoupon || isUpdating}
+                          className="flex-1 bg-transparent px-3 py-2 text-xs text-[#F4F1EA] placeholder-[#666666] focus:outline-none uppercase font-mono tracking-wider"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSubmittingCoupon || isUpdating || !couponCode.trim()}
+                          className="px-3 text-[11px] uppercase tracking-widest text-[#C5A880] hover:text-white disabled:opacity-40 transition-colors"
+                        >
+                          {isSubmittingCoupon ? "..." : "Apply"}
+                        </button>
+                      </form>
+                      {couponError && (
+                        <p className="text-[11px] text-rose-400 flex items-center space-x-1">
+                          <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                          <span>{couponError}</span>
+                        </p>
+                      )}
+                      {couponSuccess && (
+                        <p className="text-[11px] text-emerald-400 flex items-center space-x-1">
+                          <Check className="w-3 h-3 flex-shrink-0" />
+                          <span>{couponSuccess}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Totals Breakdown */}
+                <div className="space-y-2 text-xs pt-1 border-t border-white/10">
                   <div className="flex justify-between text-[#8E877C]">
                     <span>Subtotal</span>
                     <span className="text-[#F4F1EA] font-mono">{cart.totals.subtotal_formatted}</span>
                   </div>
+                  {cart.totals.discount > 0 && (
+                    <div className="flex justify-between text-emerald-400">
+                      <span>Privilege Benefit</span>
+                      <span className="font-mono">{cart.totals.discount_formatted}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-[#8E877C]">
                     <span>Shipping & Insurance</span>
                     <span className="text-[#C5A880] uppercase tracking-wider text-[11px]">Complimentary</span>
